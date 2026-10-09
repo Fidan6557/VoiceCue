@@ -1,5 +1,7 @@
 const express = require('express');
 const cors = require('cors');
+const path = require('path');
+const fs = require('fs');
 const db = require('./store/memoryDb');
 const privacyGateway = require('./services/privacyGateway');
 const auctionEngine = require('./services/auctionEngine');
@@ -10,6 +12,12 @@ const PORT = process.env.PORT || 4000;
 
 app.use(cors());
 app.use(express.json());
+
+// Serve frontend production build if present
+const frontendDist = path.join(__dirname, '../../frontend/dist');
+if (fs.existsSync(frontendDist)) {
+  app.use(express.static(frontendDist));
+}
 
 // Health Check
 app.get('/api/health', (req, res) => {
@@ -178,6 +186,16 @@ app.put('/api/studio/policy', (req, res) => {
 
 app.get('/api/analytics', (req, res) => {
   res.json(db.analytics);
+});
+
+// SPA Fallback for client routing
+app.get('*', (req, res, next) => {
+  if (req.path.startsWith('/api')) return next();
+  const indexPath = path.join(frontendDist, 'index.html');
+  if (fs.existsSync(indexPath)) {
+    return res.sendFile(indexPath);
+  }
+  next();
 });
 
 // Start Server

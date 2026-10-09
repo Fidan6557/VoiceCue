@@ -52,6 +52,20 @@ Open `http://localhost:3000` in your browser.
 
 ---
 
+## ☁️ Deploy to Render
+
+VoiceCue is pre-configured for one-click deployment on [Render](https://render.com):
+
+1. Link this repository in Render Dashboard (**New +** -> **Web Service** or **Blueprints**).
+2. Render will automatically read `render.yaml` or use:
+   - **Environment:** `Node`
+   - **Build Command:** `npm run build`
+   - **Start Command:** `npm start`
+   - **Health Check Path:** `/api/health`
+3. Click **Deploy**. The platform, 3D Minecraft world, and B2B consoles will be live on your `.onrender.com` domain.
+
+---
+
 ## 📜 Documentation
 
 - [ARCHITECTURE.md](./ARCHITECTURE.md) — Detailed data flow, component breakdown, and privacy guarantees.

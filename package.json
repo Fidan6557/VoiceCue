@@ -1,0 +1,21 @@
+{
+  "name": "voicecue",
+  "version": "1.0.0",
+  "description": "VoiceCue - In-Game Contextual Ad Recommendation Platform",
+  "main": "backend/src/server.js",
+  "scripts": {
+    "build": "npm install --prefix backend && npm install --prefix frontend && npm run build --prefix frontend",
+    "start": "node backend/src/server.js",
+    "dev:backend": "npm run dev --prefix backend",
+    "dev:frontend": "npm run dev --prefix frontend"
+  },
+  "keywords": [
+    "voicecue",
+    "contextual-ads",
+    "minecraft",
+    "in-game-advertising",
+    "on-device-nlp"
+  ],
+  "author": "VoiceCue",
+  "license": "MIT"
+}
