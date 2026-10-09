@@ -17,7 +17,8 @@ class AuctionEngine {
       c.status === 'active' && 
       c.moderationStatus === 'approved' &&
       c.targetSlotAspect === slot.aspectRatio &&
-      c.spentToday < c.dailyBudget &&
+      // Budget: must be able to afford one impression at its own max bid (price never exceeds own bid)
+      (c.dailyBudget - c.spentToday) >= c.bidCpm / 1000 &&
       c.bidCpm >= slot.floorPriceCpm
     );
 
@@ -27,10 +28,8 @@ class AuctionEngine {
       const matched = eligibleCampaigns.filter(c => {
         const catMatch = c.category.toLowerCase() === targetCategory || 
                          c.category.toLowerCase().startsWith(targetCategory.split('.')[0]);
-        const keywordMatch = intentSignal.rawKeyword && c.keywords.some(kw => 
-          intentSignal.rawKeyword.toLowerCase().includes(kw.toLowerCase())
-        );
-        return catMatch || keywordMatch;
+        // Raw keywords are never stored server-side, so matching is category-only.
+        return catMatch;
       });
 
       // If we have targeted matches, prioritize them!
@@ -48,19 +47,17 @@ class AuctionEngine {
     }
 
     // 4. Run Second-Price Auction (Vickrey Auction)
-    // Sort by bid descending
-    eligibleCampaigns.sort((a, b) => b.bidCpm - a.bidCpm);
+    // Deterministic ordering: bid desc, then campaign id asc as tie-breaker (no randomness).
+    eligibleCampaigns.sort((a, b) => (b.bidCpm - a.bidCpm) || String(a.id).localeCompare(String(b.id)));
 
     const winner = eligibleCampaigns[0];
-    let winningCpm = slot.floorPriceCpm;
-
-    if (eligibleCampaigns.length > 1) {
-      const runnerUp = eligibleCampaigns[1];
-      // Second price + 1 cent, bounded by winner's max bid
-      winningCpm = Math.min(winner.bidCpm, Number((runnerUp.bidCpm + 0.01).toFixed(2)));
-    } else {
-      winningCpm = Math.max(slot.floorPriceCpm, Number((winner.bidCpm * 0.75).toFixed(2)));
-    }
+    const INCREMENT = 0.01;
+    // Clearing price = max(second-highest bid, floor) + increment, never above winner's own bid.
+    // Single bidder: second price is the floor.
+    const secondBid = eligibleCampaigns.length > 1 ? eligibleCampaigns[1].bidCpm : slot.floorPriceCpm;
+    const clearing = Math.max(secondBid, slot.floorPriceCpm) + INCREMENT;
+    const winningCpm = Number(Math.min(winner.bidCpm, clearing).toFixed(2));
+    const pricingRule = eligibleCampaigns.length > 1 ? 'second_price_plus_increment' : 'floor_plus_increment';
 
     // 5. Calculate Revenue Split (70% studio / 30% platform)
     const costPerImpression = winningCpm / 1000;
@@ -68,11 +65,12 @@ class AuctionEngine {
     const platformShare = Number((costPerImpression * (1 - db.studioPolicy.revShareStudio)).toFixed(5));
 
     // Update campaign spend & analytics
-    winner.spentToday = Number((winner.spentToday + costPerImpression).toFixed(4));
+    winner.spentToday = Number((winner.spentToday + costPerImpression).toFixed(6));
     db.analytics.totalImpressions += 1;
-    db.analytics.totalSpendGross = Number((db.analytics.totalSpendGross + costPerImpression).toFixed(2));
-    db.analytics.studioPayout = Number((db.analytics.studioPayout + (costPerImpression * 0.7)).toFixed(2));
-    db.analytics.platformFee = Number((db.analytics.platformFee + (costPerImpression * 0.3)).toFixed(2));
+    // Keep sub-cent precision so per-impression amounts are not rounded away
+    db.analytics.totalSpendGross = Number((db.analytics.totalSpendGross + costPerImpression).toFixed(5));
+    db.analytics.studioPayout = Number((db.analytics.studioPayout + studioShare).toFixed(5));
+    db.analytics.platformFee = Number((db.analytics.platformFee + platformShare).toFixed(5));
 
     // Update slot's current rendered ad
     slot.currentAd = {
@@ -101,6 +99,9 @@ class AuctionEngine {
         slotName: slot.name,
         winningBrand: winner.brandName,
         winningCpm,
+        winnerBidCpm: winner.bidCpm,
+        floorPriceCpm: slot.floorPriceCpm,
+        pricingRule,
         competingBiddersCount: eligibleCampaigns.length,
         studioEarnings: `$${(studioShare * 1000).toFixed(2)}/1k`,
         platformFee: `$${(platformShare * 1000).toFixed(2)}/1k`
@@ -119,7 +120,7 @@ class AuctionEngine {
         pixelResolution: `${slot.pixelWidth}x${slot.pixelHeight}`,
         sponsoredNotice: 'Sponsored • VoiceCue Verified',
         whyThisAd: intentSignal 
-          ? `You opted into Smart Recommendations and recently mentioned interest in "${intentSignal.category.replace('.', ' ')}". No raw audio or text leaves your device.`
+          ? `You opted into Smart Recommendations and recently showed interest in the "${intentSignal.category.replace('.', ' ')}" category. Only that coarse category is shared; no raw audio or text is stored.`
           : 'Contextual game world recommendation.'
       }
     };

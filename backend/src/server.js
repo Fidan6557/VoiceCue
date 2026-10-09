@@ -34,13 +34,15 @@ app.get('/api/health', (req, res) => {
 // Get player session state
 app.get('/api/privacy/status/:sessionId', (req, res) => {
   const session = db.getOrCreateSession(req.params.sessionId);
-  res.json(session);
+  // Expose only coarse signal fields
+  res.json({ ...session, signals: session.signals.map(({ category, confidence, timestamp, ttlExpiresAt }) => ({ category, confidence, timestamp, ttlExpiresAt })) });
 });
 
 // Player toggles opt-in / opt-out
 app.post('/api/privacy/consent', (req, res) => {
-  const { sessionId, consented, ageVerified } = req.body;
+  const { sessionId, consented, ageVerified } = req.body || {};
   if (!sessionId) return res.status(400).json({ error: 'sessionId is required' });
+  if (typeof consented !== 'boolean') return res.status(400).json({ error: 'consented (boolean) is required' });
   
   const session = db.setConsent(sessionId, !!consented, ageVerified !== false);
   res.json({
@@ -63,20 +65,27 @@ app.post('/api/privacy/forget', (req, res) => {
 // --- INTENT SIGNAL INGESTION ---
 
 app.post('/api/intent/signal', (req, res) => {
-  const { anonSessionId, category, confidence, rawKeyword } = req.body;
-  if (!anonSessionId || !category) {
-    return res.status(400).json({ error: 'anonSessionId and category required' });
+  // NOTE: raw keyword / transcript fields (e.g. rawKeyword) are intentionally ignored and never stored or logged.
+  const { anonSessionId, category, confidence } = req.body || {};
+  if (!anonSessionId || typeof anonSessionId !== 'string' || !category || typeof category !== 'string') {
+    return res.status(400).json({ accepted: false, code: 'BAD_REQUEST', error: 'anonSessionId and category (strings) required' });
   }
 
-  const result = privacyGateway.processSignal({
-    anonSessionId,
-    category,
-    confidence: confidence || 0.9,
-    rawKeyword: rawKeyword || ''
-  });
+  // Confidence: optional. Missing -> null (never fabricated). Present -> must be a finite number, clamped to [0,1].
+  let conf = null;
+  if (confidence !== undefined && confidence !== null) {
+    const n = Number(confidence);
+    if (typeof confidence === 'boolean' || !Number.isFinite(n)) {
+      return res.status(400).json({ accepted: false, code: 'BAD_REQUEST', error: 'confidence must be a number in [0,1]' });
+    }
+    conf = Math.min(1, Math.max(0, n));
+  }
+
+  const result = privacyGateway.processSignal({ anonSessionId, category, confidence: conf });
 
   if (!result.accepted) {
-    return res.status(403).json(result);
+    const status = result.code === 'UNKNOWN_CATEGORY' ? 400 : 403;
+    return res.status(status).json({ ...result, error: result.reason });
   }
 
   res.json(result);
@@ -178,7 +187,21 @@ app.get('/api/studio/policy', (req, res) => {
 });
 
 app.put('/api/studio/policy', (req, res) => {
-  db.studioPolicy = { ...db.studioPolicy, ...req.body };
+  const body = req.body || {};
+  const update = {};
+  if (body.revShareStudio !== undefined) {
+    const r = Number(body.revShareStudio);
+    if (!Number.isFinite(r) || r < 0 || r > 1) return res.status(400).json({ error: 'revShareStudio must be in [0,1]' });
+    update.revShareStudio = r;
+  }
+  if (body.blockedCategories !== undefined) {
+    if (!Array.isArray(body.blockedCategories)) return res.status(400).json({ error: 'blockedCategories must be an array' });
+    update.blockedCategories = body.blockedCategories.map(String);
+  }
+  for (const [k, v] of Object.entries(body)) {
+    if (!(k in update) && k !== 'revShareStudio' && k !== 'blockedCategories') update[k] = v;
+  }
+  db.studioPolicy = { ...db.studioPolicy, ...update };
   res.json(db.studioPolicy);
 });
 

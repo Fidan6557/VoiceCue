@@ -209,22 +209,27 @@ class MemoryDb {
     return s;
   }
 
-  addIntentSignal(sessionId, category, confidence = 0.9, rawKeyword = '') {
-    const s = this.getOrCreateSession(sessionId);
-    if (!s.consented) {
+  // Stores only coarse category + clamped confidence (or null). Raw transcript / keyword text is never persisted.
+  addIntentSignal(sessionId, category, confidence = null) {
+    const s = this.sessions.get(sessionId);
+    if (!s || !s.consented) {
       throw new Error('ConsentNotGranted: Player has not opted into smart recommendations');
     }
     const signal = {
       category,
-      confidence,
+      confidence: typeof confidence === 'number' && Number.isFinite(confidence) ? confidence : null,
       timestamp: Date.now(),
-      ttlExpiresAt: Date.now() + 10 * 60 * 1000, // 10 minutes TTL
-      rawKeyword
+      ttlExpiresAt: Date.now() + 10 * 60 * 1000 // 10 minutes TTL
     };
     s.signals.push(signal);
     // Keep only non-expired signals
     s.signals = s.signals.filter(sig => sig.ttlExpiresAt > Date.now());
     return signal;
+  }
+
+  // Right to be forgotten: remove the session entirely
+  deleteSession(sessionId) {
+    return this.sessions.delete(sessionId);
   }
 
   getLatestValidSignal(sessionId) {

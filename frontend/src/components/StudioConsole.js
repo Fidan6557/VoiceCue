@@ -1,4 +1,5 @@
 import { VoiceCueApi } from '../services/api';
+import { asList, isOfflineResult, trackResult } from './offlineStatus';
 
 export class StudioConsole {
   constructor(containerElement) {
@@ -11,9 +12,18 @@ export class StudioConsole {
   }
 
   async loadData() {
-    this.slots = await VoiceCueApi.getSlots();
-    this.moderationQueue = await VoiceCueApi.getModerationQueue();
-    this.policy = await VoiceCueApi.getPolicy();
+    try {
+      this.slots = asList(trackResult(await VoiceCueApi.getSlots()));
+      this.moderationQueue = asList(trackResult(await VoiceCueApi.getModerationQueue()));
+      const policy = trackResult(await VoiceCueApi.getPolicy());
+      if (policy && !isOfflineResult(policy) && Array.isArray(policy.blockedCategories)) {
+        this.policy = policy;
+      } else if (policy && policy.data && Array.isArray(policy.data.blockedCategories)) {
+        this.policy = policy.data;
+      }
+    } catch (e) {
+      console.warn('StudioConsole: failed to load data', e);
+    }
     this.updateUI();
   }
 

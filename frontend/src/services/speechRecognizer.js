@@ -1,4 +1,5 @@
 // VoiceCue Speech Recognition & Edge Intent Extractor
+import { detectIntent, detectSensitive, TAXONOMY, SENSITIVE_KEYWORDS } from './intentEngine.js';
 
 export class SpeechRecognizer {
   constructor(options = {}) {
@@ -10,36 +11,9 @@ export class SpeechRecognizer {
     this.recognition = null;
     this.initWebSpeech();
 
-    // Taxonomy rules (on-device extractor)
-    this.taxonomy = [
-      {
-        category: 'food.pizza',
-        keywords: ['pizza', 'pepperoni', 'hungry', 'food', 'starving', 'eat', 'slice'],
-        confidence: 0.95
-      },
-      {
-        category: 'gaming.gear',
-        keywords: ['headphones', 'microphone', 'mic', 'headset', 'audio', 'keyboard', 'mouse', 'gpu', 'gaming', 'gear'],
-        confidence: 0.92
-      },
-      {
-        category: 'beverages.energy',
-        keywords: ['drink', 'energy', 'thirst', 'thirsty', 'soda', 'volt', 'burn', 'monster', 'red bull'],
-        confidence: 0.90
-      },
-      {
-        category: 'clothing.footwear',
-        keywords: ['sneakers', 'shoes', 'boots', 'kicks', 'running shoes', 'footwear'],
-        confidence: 0.88
-      }
-    ];
-
-    // Sensitive categories (hard-blocked)
-    this.sensitiveKeywords = [
-      'casino', 'bet', 'betting', 'roulette', '1xbet', 'gambling',
-      'election', 'politics', 'president', 'party',
-      'sex', 'porn', 'nsfw', 'vodka', 'beer', 'alcohol', 'drugs'
-    ];
+    // Taxonomy + sensitive keyword rules live in ./intentEngine.js (pure, rule-based).
+    this.taxonomy = TAXONOMY;
+    this.sensitiveKeywords = SENSITIVE_KEYWORDS;
   }
 
   initWebSpeech() {
@@ -98,53 +72,38 @@ export class SpeechRecognizer {
     this.onSpeechStatus({ listening: false, text: 'Microphone turned off' });
   }
 
-  // Simulated or real transcript analysis
+  // Simulated or real transcript analysis (rule-based heuristic, see intentEngine.js)
   processTranscript(transcript) {
-    const lower = transcript.toLowerCase().trim();
-
-    // 1. Sensitive check
-    for (const bad of this.sensitiveKeywords) {
-      if (lower.includes(bad)) {
-        this.onIntentExtracted({
-          blocked: true,
-          reason: `SENSITIVE_TOPIC_REJECTED (${bad})`,
-          transcript,
-          category: null,
-          confidence: 0
-        });
-        return;
-      }
-    }
-
-    // 2. Taxonomy matching
-    let matched = null;
-    for (const item of this.taxonomy) {
-      for (const kw of item.keywords) {
-        if (lower.includes(kw)) {
-          matched = {
-            category: item.category,
-            confidence: item.confidence,
-            matchedKeyword: kw,
-            transcript,
-            blocked: false
-          };
-          break;
-        }
-      }
-      if (matched) break;
-    }
-
-    if (matched) {
-      this.onIntentExtracted(matched);
-    } else {
+    // 1. Sensitive check (word-boundary)
+    const bad = detectSensitive(transcript);
+    if (bad) {
       this.onIntentExtracted({
-        category: 'general.contextual',
-        confidence: 0.45,
-        matchedKeyword: null,
+        blocked: true,
+        reason: `SENSITIVE_TOPIC_REJECTED (${bad})`,
         transcript,
-        blocked: false
+        category: null,
+        score: 0,
+        confidence: 0
       });
+      return;
     }
+
+    // 2. Taxonomy matching with word boundaries, negation and evidence scoring
+    const intent = detectIntent(transcript);
+    // NOTE: `confidence` is kept only for backwards compatibility with callers;
+    // it equals `score`, a heuristic evidence score, not a calibrated probability.
+    this.onIntentExtracted({
+      category: intent.category || 'general.contextual',
+      score: intent.score,
+      confidence: intent.score,
+      matchedKeyword: intent.matchedKeywords[0] || null,
+      matchedKeywords: intent.matchedKeywords,
+      negated: intent.negated,
+      reason: intent.reason,
+      matched: Boolean(intent.category),
+      transcript,
+      blocked: false
+    });
   }
 
   // Helper to test voice phrases directly

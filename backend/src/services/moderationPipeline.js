@@ -2,43 +2,102 @@
 const db = require('../store/memoryDb');
 const { v4: uuidv4 } = require('uuid');
 
-class ModerationPipeline {
-  // L1: Heuristic & Pattern Check
-  checkL1Rules(campaignData) {
-    const textToCheck = `${campaignData.headline || ''} ${campaignData.tagline || ''} ${campaignData.callToAction || ''}`.toLowerCase();
-    
-    const hardBannedWords = [
-      'casino', 'betting', 'gambling', '1xbet', 'porn', 'nsfw', 
-      'weapon', 'crypto', 'quick money', 'get rich quick'
-    ];
+// Rule-based (not ML) creative screening helpers.
+const LEET_MAP = { '0': 'o', '1': 'i', '3': 'e', '4': 'a', '5': 's', '7': 't', '8': 'b', '@': 'a', '$': 's', '!': 'i', '|': 'i', '+': 't' };
 
-    for (const word of hardBannedWords) {
-      if (textToCheck.includes(word)) {
-        return {
-          passed: false,
-          layer: 'L1_RULES',
-          reason: `Violates prohibited keywords policy: found '${word}'`
-        };
-      }
+// Normalize obfuscation: leetspeak, separators inside words ("k.i.l.l"),
+// spaced single letters ("k i l l"), repeated letters ("kiiill" -> "kill").
+function normalizeText(raw) {
+  let t = String(raw || '').toLowerCase();
+  // Leet substitution only when the char is adjacent to a letter (keeps "100%" / "1xbet" intact-ish).
+  t = t.replace(/[013457@$!|+8]/g, (ch, i, str) => {
+    const prev = str[i - 1] || ''; const next = str[i + 1] || '';
+    return /[a-z]/.test(prev) || /[a-z]/.test(next) ? LEET_MAP[ch] : ch;
+  });
+  t = t.replace(/([a-z])[.\-_*]+(?=[a-z])/g, '$1'); // k.i.l.l / h-a-t-e
+  // Collapse runs of >=3 single letters separated by spaces: "k i l l" -> "kill"
+  t = t.replace(/\b(?:[a-z] ){2,}[a-z]\b/g, m => m.replace(/ /g, ''));
+  t = t.replace(/([a-z])\1{2,}/g, '$1'); // kiiiill -> kill
+  return t.replace(/[^a-z0-9%\s]+/g, ' ').replace(/\s+/g, ' ').trim();
+}
+
+// Whole-word / whole-phrase rules. Word boundaries avoid false positives such as
+// "skill" (kill), "class"/"assessment" (ass), "scunthorpe"-style substrings.
+const BANNED_RULES = [
+  { term: 'casino', category: 'gambling' },
+  { term: 'betting', category: 'gambling' },
+  { term: 'gambling', category: 'gambling' },
+  { term: '1xbet', category: 'gambling' },
+  { term: 'porn', category: 'adult' },
+  { term: 'nsfw', category: 'adult' },
+  { term: 'weapon', category: 'violence', plural: true },
+  { term: 'kill', category: 'violence', plural: true },
+  { term: 'hate', category: 'hate', plural: true },
+  { term: 'crypto', category: 'financial_scam' },
+  { term: 'quick money', category: 'financial_scam' },
+  { term: 'get rich quick', category: 'financial_scam' }
+].map(r => {
+  const body = r.term.split(' ').map(w => w.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('\\s+');
+  return { ...r, re: new RegExp(`\\b${body}${r.plural ? '(?:s|z|er|ers|ing)?' : ''}\\b`, 'i') };
+});
+
+function findViolations(text) {
+  const normalized = normalizeText(text);
+  // Also check the plain lowercased text so terms containing digits ("1xbet") survive.
+  const plain = String(text || '').toLowerCase().replace(/[^a-z0-9%\s]+/g, ' ');
+  const reasons = [];
+  for (const rule of BANNED_RULES) {
+    const m = normalized.match(rule.re) || plain.match(rule.re);
+    if (m) reasons.push({ term: rule.term, matched: m[0], category: rule.category });
+  }
+  return { normalized, reasons };
+}
+
+class ModerationPipeline {
+  // L1: Heuristic & Pattern Check (word-boundary + obfuscation normalization)
+  checkL1Rules(campaignData) {
+    const textToCheck = `${campaignData.headline || ''} ${campaignData.tagline || ''} ${campaignData.callToAction || ''}`;
+    const { reasons } = findViolations(textToCheck);
+
+    if (reasons.length) {
+      return {
+        passed: false,
+        layer: 'L1_RULES',
+        reason: `Violates prohibited keywords policy: found ${reasons.map(r => `'${r.term}'`).join(', ')}`,
+        reasons
+      };
     }
 
-    return { passed: true, layer: 'L1_RULES' };
+    return { passed: true, layer: 'L1_RULES', reasons: [] };
   }
 
-  // L2: AI Multimodal Evaluation (Simulated or proxied to ML container)
+  // L2: Heuristic brand-safety signals. NOT an ML classifier and NOT random:
+  // riskScore is a deterministic heuristic derived from observable copy features.
   evaluateL2AI(campaignData) {
-    // Check brand safety confidence
-    const riskFactor = Math.random() * 0.15; // Low risk default for approved brands
-    const isClean = riskFactor < 0.25;
+    const text = `${campaignData.headline || ''} ${campaignData.tagline || ''} ${campaignData.callToAction || ''}`;
+    const reasons = [];
+    let risk = 0;
+    const letters = text.replace(/[^A-Za-z]/g, '');
+    const upperRatio = letters.length ? letters.replace(/[^A-Z]/g, '').length / letters.length : 0;
+    if (letters.length > 8 && upperRatio > 0.7) { risk += 0.15; reasons.push('EXCESSIVE_CAPS'); }
+    if ((text.match(/!/g) || []).length >= 3) { risk += 0.1; reasons.push('EXCESSIVE_EXCLAMATION'); }
+    if (/\b(urgent|act now|click here|100% guarantee|limited time)\b/i.test(normalizeText(text))) { risk += 0.2; reasons.push('PRESSURE_LANGUAGE'); }
+    if ((campaignData.headline || '').trim().length < 5) { risk += 0.1; reasons.push('HEADLINE_TOO_SHORT'); }
+    const { reasons: banned } = findViolations(text);
+    if (banned.length) { risk += 0.6; reasons.push(...banned.map(b => `PROHIBITED_TERM:${b.term}`)); }
+    risk = Math.min(1, Math.round(risk * 100) / 100);
 
     return {
-      passed: isClean,
-      layer: 'L2_AI_CLASSIFIER',
-      confidence: (1 - riskFactor).toFixed(2),
+      passed: risk < 0.5,
+      layer: 'L2_HEURISTIC_CLASSIFIER',
+      // Heuristic score (1 - risk), not a calibrated probability.
+      score: Number((1 - risk).toFixed(2)),
+      confidence: (1 - risk).toFixed(2), // kept for backward compat; equals score
+      riskScore: risk,
+      reasons,
       flags: {
-        nsfw: 'CLEAR (0.01)',
-        toxicity: 'CLEAR (0.02)',
-        brandSafetyScore: (98.5 - riskFactor * 10).toFixed(1) + '%'
+        heuristicReasons: reasons,
+        brandSafetyScore: ((1 - risk) * 100).toFixed(1) + '%'
       }
     };
   }
@@ -101,3 +160,5 @@ class ModerationPipeline {
 }
 
 module.exports = new ModerationPipeline();
+module.exports.normalizeText = normalizeText;
+module.exports.findViolations = findViolations;

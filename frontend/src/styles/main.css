@@ -987,3 +987,21 @@ input:checked + .slider:before {
   color: #64748b;
   font-size: 20px;
 }
+
+/* Backend live/offline-demo indicator */
+.backend-status {
+  margin-left: 10px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  background: rgba(52, 211, 153, 0.15);
+  color: #34d399;
+  border: 1px solid rgba(52, 211, 153, 0.4);
+}
+.backend-status.offline {
+  background: rgba(251, 191, 36, 0.15);
+  color: #fbbf24;
+  border-color: rgba(251, 191, 36, 0.5);
+}

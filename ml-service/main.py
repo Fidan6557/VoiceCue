@@ -29,7 +29,9 @@ def health_check():
     return {
         "status": "healthy",
         "service": "VoiceCue ML Service",
-        "models_loaded": ["IntentExtractor_v2", "BrandSafetyClassifier_L2"]
+        # Both components are rule-based heuristics, not trained ML models.
+        "models_loaded": [],
+        "rule_engines": ["IntentExtractor_rules", "ModerationClassifier_rules"]
     }
 
 @app.post("/extract-intent")

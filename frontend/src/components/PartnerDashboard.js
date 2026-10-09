@@ -1,4 +1,5 @@
 import { VoiceCueApi } from '../services/api';
+import { asList, isOfflineResult, trackResult } from './offlineStatus';
 
 export class PartnerDashboard {
   constructor(containerElement, onCampaignCreated) {
@@ -10,7 +11,12 @@ export class PartnerDashboard {
   }
 
   async loadData() {
-    this.campaigns = await VoiceCueApi.getCampaigns();
+    try {
+      this.campaigns = asList(trackResult(await VoiceCueApi.getCampaigns()));
+    } catch (e) {
+      console.warn('PartnerDashboard: failed to load campaigns', e);
+      this.campaigns = [];
+    }
     this.renderCampaignList();
   }
 
@@ -205,8 +211,12 @@ export class PartnerDashboard {
         accentIcon: previewIcon.textContent
       };
 
-      const result = await VoiceCueApi.createCampaign(campaign);
-      alert(`Campaign "${campaign.campaignName}" submitted to Moderation Pipeline!\nL1/L2 Status: ${result.reviewResult ? result.reviewResult.status : 'queued'}`);
+      const result = trackResult(await VoiceCueApi.createCampaign(campaign));
+      if (isOfflineResult(result) || (result && result.ok === false)) {
+        alert(`Campaign "${campaign.campaignName}" was NOT submitted (${isOfflineResult(result) ? 'backend offline - demo mode' : (result.error || 'server rejected')}).`);
+        return;
+      }
+      alert(`Campaign "${campaign.campaignName}" submitted to Moderation Pipeline!\nL1/L2 Status: ${result && result.reviewResult ?result.reviewResult.status : 'queued'}`);
       this.loadData();
       this.onCampaignCreated(campaign);
     });
@@ -224,7 +234,7 @@ export class PartnerDashboard {
         </td>
         <td><span class="badge badge-blue">${c.category}</span></td>
         <td>${c.targetSlotAspect}</td>
-        <td style="font-family: var(--font-mono); font-weight: 700; color: #ffca28;">$${c.bidCpm.toFixed(2)}</td>
+        <td style="font-family: var(--font-mono); font-weight: 700; color: #ffca28;">$${Number(c.bidCpm || 0).toFixed(2)}</td>
         <td>
           <span class="badge ${c.moderationStatus === 'approved' ? 'badge-green' : 'badge-yellow'}">
             ${c.moderationStatus === 'approved' ? 'Approved' : 'In Review'}

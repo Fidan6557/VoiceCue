@@ -1,0 +1,23 @@
+[
+  {"text": "Win big at our online casino tonight", "flag": true, "tags": ["policy"]},
+  {"text": "Best sports betting odds, sign up now", "flag": true, "tags": ["policy"]},
+  {"text": "Get rich quick with our crypto token", "flag": true, "tags": ["policy"]},
+  {"text": "Buy this weapon pack for real money", "flag": true, "tags": ["policy"]},
+  {"text": "Play c4sino slots for free spins", "flag": true, "tags": ["obfuscated"]},
+  {"text": "G@mbling bonus: deposit and win", "flag": true, "tags": ["obfuscated"]},
+  {"text": "1x bet promo code inside", "flag": true, "tags": ["obfuscated"]},
+  {"text": "k1ll yourself noob", "flag": true, "tags": ["toxic", "obfuscated"]},
+  {"text": "go kill yourself", "flag": true, "tags": ["toxic"]},
+  {"text": "you are a f*cking idiot", "flag": true, "tags": ["toxic", "obfuscated"]},
+  {"text": "Free n.s.f.w content click here", "flag": true, "tags": ["obfuscated"]},
+  {"text": "Level up your skill with HyperX gear", "flag": false, "tags": ["benign-trap"]},
+  {"text": "First class pizza delivery in 30 minutes", "flag": false, "tags": ["benign-trap"]},
+  {"text": "Free skill assessment for new players", "flag": false, "tags": ["benign-trap"]},
+  {"text": "Occasional bonus drops for loyal fans", "flag": false, "tags": ["benign-trap"]},
+  {"text": "Cryptic Quest: the new puzzle adventure", "flag": false, "tags": ["benign-trap"]},
+  {"text": "Scunthorpe United official merch store", "flag": false, "tags": ["benign-trap"]},
+  {"text": "Hot Pizza in 30 Mins! 25% off", "flag": false, "tags": ["benign"]},
+  {"text": "Volt Energy: Endless Miner Stamina", "flag": false, "tags": ["benign"]},
+  {"text": "Apex Sneakers - speed runner footwear sale", "flag": false, "tags": ["benign"]},
+  {"text": "Killer deals on keyboards this week", "flag": false, "tags": ["benign-trap"]}
+]

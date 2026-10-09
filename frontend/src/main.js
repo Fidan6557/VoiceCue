@@ -4,11 +4,14 @@ import { PartnerDashboard } from './components/PartnerDashboard';
 import { StudioConsole } from './components/StudioConsole';
 import { ArchitectureInspector } from './components/ArchitectureInspector';
 import { VoiceCueApi } from './services/api';
+import { detectIntent } from './services/intentEngine';
+import { isOfflineResult, trackResult } from './components/offlineStatus';
 
 class VoiceCueApp {
   constructor() {
     this.sessionId = 'anon_' + Math.random().toString(36).substring(2, 9);
-    this.consented = true;
+    // Consent is only considered granted once it has been sent to the backend.
+    this.consented = false;
     this.pacingDelay = 5; // seconds for demo presentation
     this.activeTab = 'minecraft';
 
@@ -61,16 +64,29 @@ class VoiceCueApp {
     this.setupAdModal();
     this.setupPointerLock();
 
-    // Send initial consent to backend
-    await VoiceCueApi.setConsent(this.sessionId, true);
+    // Send initial consent to backend BEFORE any intent signal is transmitted
+    const optInToggle = document.getElementById('toggle-optin');
+    const wantConsent = optInToggle ? optInToggle.checked : true;
+    let consentRes = null;
+    try {
+      consentRes = trackResult(await VoiceCueApi.setConsent(this.sessionId, wantConsent));
+    } catch (e) {
+      console.warn('Consent request failed', e);
+    }
+    this.consented = wantConsent;
     this.inspector.addLog({
-      type: 'CONSENT_GRANTED',
-      message: 'Player granted Opt-in consent for smart voice recommendations.'
+      type: wantConsent ? 'CONSENT_GRANTED' : 'CONSENT_REVOKED',
+      message: (wantConsent
+        ? 'Player granted Opt-in consent for smart voice recommendations.'
+        : 'Player has not opted in; voice recommendations disabled.') +
+        (!consentRes || isOfflineResult(consentRes) ? ' [OFFLINE DEMO: consent stored locally only]' : '')
     });
+    if (!wantConsent) return;
 
     // Seed initial ad into Tavern Painting so the world feels alive right away!
     setTimeout(() => {
-      this.triggerIntentWorkflow('food.pizza', 0.95, 'pizza', 'I want hot pizza!', 1);
+      const seed = detectIntent('I want hot pizza!');
+      this.triggerIntentWorkflow(seed.category, seed.score, seed.matchedKeywords[0], 'I want hot pizza!', 1);
     }, 1500);
   }
 
@@ -113,6 +129,15 @@ class VoiceCueApp {
           return;
         }
 
+        // No confident intent (no keyword, negated, or ambiguous): serve nothing.
+        if (result.matched === false || !result.category) {
+          this.inspector.addLog({
+            type: 'NO_INTENT',
+            message: `No ad served: ${result.reason || 'no confident intent detected'}`
+          });
+          return;
+        }
+
         this.triggerIntentWorkflow(
           result.category,
           result.confidence,
@@ -149,15 +174,26 @@ class VoiceCueApp {
       message: `On-Device Extractor: category "${category}" (conf: ${confidence.toFixed(2)}), keyword: "${matchedKeyword || 'n/a'}"`
     });
 
-    // 2. Transmit coarse signal to Privacy Gateway
-    const gatewayRes = await VoiceCueApi.sendIntentSignal({
-      anonSessionId: this.sessionId,
-      category,
-      confidence,
-      rawKeyword: matchedKeyword
-    });
+    if (!this.consented) {
+      this.inspector.addLog({ type: 'CONSENT_REQUIRED', message: 'Intent signal not sent: no opt-in consent.' });
+      return;
+    }
 
-    if (gatewayRes && gatewayRes.accepted === false) {
+    // 2. Transmit coarse signal to Privacy Gateway
+    let gatewayRes = null;
+    try {
+      gatewayRes = trackResult(await VoiceCueApi.sendIntentSignal({
+        anonSessionId: this.sessionId,
+        category,
+        confidence,
+        rawKeyword: matchedKeyword
+      }));
+    } catch (e) {
+      console.warn('Intent signal failed', e);
+    }
+    const gatewayOffline = !gatewayRes || isOfflineResult(gatewayRes);
+
+    if (gatewayRes && gatewayRes.accepted === false && !gatewayOffline) {
       this.inspector.addLog({
         type: 'GATEWAY_DROPPED',
         message: gatewayRes.reason
@@ -167,7 +203,9 @@ class VoiceCueApp {
 
     this.inspector.addLog({
       type: 'PRIVACY_GATEWAY_OK',
-      message: `Signal ${category} saved in Privacy Gateway (TTL 10m). Display delay: ${delaySeconds} sec.`
+      message: gatewayOffline
+        ? `[OFFLINE DEMO] Backend unreachable: signal ${category} NOT stored server-side (simulated). Display delay: ${delaySeconds} sec.`
+        : `Signal ${category} saved in Privacy Gateway (TTL 10m). Display delay: ${delaySeconds} sec.`
     });
 
     // 3. Pacing Delay (Simulating player walking around the open world for 1-2 minutes)
@@ -177,9 +215,22 @@ class VoiceCueApp {
 
     setTimeout(async () => {
       // 4. Run Second-Price Auction
-      const auctionRes = await VoiceCueApi.runAuction(targetSlotId, this.sessionId);
+      let auctionRes = null;
+      try {
+        auctionRes = trackResult(await VoiceCueApi.runAuction(targetSlotId, this.sessionId));
+      } catch (e) {
+        console.warn('Auction request failed', e);
+      }
 
-      if (auctionRes && auctionRes.success) {
+      if (!auctionRes || isOfflineResult(auctionRes)) {
+        this.inspector.addLog({
+          type: 'AUCTION_OFFLINE',
+          message: '[OFFLINE DEMO] Auction service unreachable: no real ad decision; painting left unchanged.'
+        });
+        return;
+      }
+
+      if (auctionRes.success && auctionRes.auction && auctionRes.creative) {
         const { auction, creative } = auctionRes;
 
         this.inspector.addLog({
@@ -188,7 +239,11 @@ class VoiceCueApp {
         });
 
         // 5. Render dynamically on in-game Minecraft painting!
-        this.minecraftWorld.updateSlotWithAd(targetSlotId, creative);
+        try {
+          this.minecraftWorld.updateSlotWithAd(targetSlotId, creative);
+        } catch (e) {
+          console.warn('Failed to render ad in 3D world', e);
+        }
 
         // Flash HUD indicator
         const prompt = document.getElementById('interaction-prompt');
@@ -233,7 +288,11 @@ class VoiceCueApp {
     if (optInToggle) {
       optInToggle.addEventListener('change', async (e) => {
         this.consented = e.target.checked;
-        await VoiceCueApi.setConsent(this.sessionId, this.consented);
+        try {
+          trackResult(await VoiceCueApi.setConsent(this.sessionId, this.consented));
+        } catch (e) {
+          console.warn('Consent update failed', e);
+        }
         if (this.consented) {
           this.inspector.addLog({
             type: 'CONSENT_ENABLED',
@@ -325,7 +384,16 @@ class VoiceCueApp {
 
     if (forgetBtn) {
       forgetBtn.addEventListener('click', async () => {
-        await VoiceCueApi.forgetMe(this.sessionId);
+        let forgetRes = null;
+        try {
+          forgetRes = trackResult(await VoiceCueApi.forgetMe(this.sessionId));
+        } catch (e) {
+          console.warn('Forget request failed', e);
+        }
+        if (!forgetRes || isOfflineResult(forgetRes) || forgetRes.success === false) {
+          alert('Backend offline: deletion could not be confirmed by the server. Please retry when online.');
+          return;
+        }
         alert('All your data and session markers have been immediately deleted.');
         this.inspector.addLog({
           type: 'RIGHT_TO_FORGET',
@@ -362,7 +430,11 @@ class VoiceCueApp {
 
   // Hook for studio moderation review
   async reviewModeration(modId, decision) {
-    await VoiceCueApi.reviewModeration(modId, decision);
+    try {
+      trackResult(await VoiceCueApi.reviewModeration(modId, decision));
+    } catch (e) {
+      console.warn('Moderation review failed', e);
+    }
     if (this.studioConsole) this.studioConsole.loadData();
     if (this.partnerDashboard) this.partnerDashboard.loadData();
     this.inspector.addLog({
