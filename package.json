@@ -19,8 +19,8 @@
   "author": "VoiceCue",
   "license": "MIT",
   "dependencies": {
-    "cors": "^2.8.6",
-    "express": "^5.3.0",
-    "uuid": "^14.0.2"
+    "cors": "^2.8.5",
+    "express": "^4.19.2",
+    "uuid": "^9.0.1"
   }
 }

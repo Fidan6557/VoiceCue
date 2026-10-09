@@ -189,7 +189,8 @@ app.get('/api/analytics', (req, res) => {
 });
 
 // SPA Fallback for client routing
-app.get('*', (req, res, next) => {
+app.use((req, res, next) => {
+  if (req.method !== 'GET') return next();
   if (req.path.startsWith('/api')) return next();
   const indexPath = path.join(frontendDist, 'index.html');
   if (fs.existsSync(indexPath)) {
