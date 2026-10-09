@@ -1,0 +1,15 @@
+{
+  "name": "voicecue-backend",
+  "version": "1.0.0",
+  "description": "VoiceCue B2B In-Game Contextual Ad Platform Core API",
+  "main": "src/server.js",
+  "scripts": {
+    "start": "node src/server.js",
+    "dev": "node --watch src/server.js"
+  },
+  "dependencies": {
+    "cors": "^2.8.5",
+    "express": "^4.19.2",
+    "uuid": "^9.0.1"
+  }
+}

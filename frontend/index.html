@@ -1,0 +1,221 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>VoiceCue — B2B In-Game Contextual Ad Recommendation Platform</title>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🎙</text></svg>">
+  <link rel="stylesheet" href="/src/styles/main.css" />
+</head>
+<body>
+  <!-- App Header & Navigation -->
+  <header id="app-header">
+    <div class="logo-container">
+      <div class="logo-badge">VoiceCue</div>
+      <div class="logo-title">Neurobridge Core</div>
+      <span class="platform-pill">B2B Enterprise</span>
+    </div>
+
+    <!-- Navigation Tabs -->
+    <nav class="nav-tabs">
+      <button class="tab-btn active" data-tab="minecraft">
+        <span class="tab-icon">🎮</span> 3D Minecraft World
+      </button>
+      <button class="tab-btn" data-tab="partner">
+        <span class="tab-icon">💼</span> B2B Advertiser Portal
+      </button>
+      <button class="tab-btn" data-tab="studio">
+        <span class="tab-icon">🏰</span> B2B Studio Console
+      </button>
+      <button class="tab-btn" data-tab="inspector">
+        <span class="tab-icon">⚡</span> Architecture & Telemetry
+      </button>
+    </nav>
+
+    <!-- Header Actions -->
+    <div class="header-actions">
+      <div class="status-indicator">
+        <span class="status-dot"></span>
+        <span id="header-session-id">ANON_SESSION</span>
+      </div>
+    </div>
+  </header>
+
+  <!-- Main Views Container -->
+  <main id="viewport-container">
+    <!-- View 1: 3D Minecraft Open World -->
+    <section id="view-minecraft" class="view-section active">
+      <canvas id="canvas-3d"></canvas>
+      <div id="crosshair"></div>
+
+      <!-- In-Game Interaction Tooltip Prompt -->
+      <div id="interaction-prompt">
+        <span class="interact-key">E</span>
+        <span class="prompt-text">[E] View Ad</span>
+      </div>
+
+      <!-- HUD Top Left: Voice & Privacy Controls -->
+      <div class="game-hud-top-left">
+        <div class="hud-card">
+          <div class="hud-header">
+            <span class="hud-title">🛡 Smart Suggestions (Opt-In)</span>
+            <div class="switch-wrapper">
+              <label class="switch">
+                <input type="checkbox" id="toggle-optin" checked />
+                <span class="slider"></span>
+              </label>
+            </div>
+          </div>
+
+          <div class="mic-status-row">
+            <div class="mic-badge active" id="mic-badge">
+              <span id="mic-icon">🎤</span>
+              <span id="mic-label">Mic Listening</span>
+            </div>
+            <button class="mic-btn-main" id="btn-toggle-mic">
+              <span>Record</span>
+            </button>
+          </div>
+
+          <!-- Quick Speech Simulator for Testing -->
+          <div class="quick-speech-label">Quick Player Speech Simulator:</div>
+          <div class="speech-chips">
+            <button class="speech-chip" data-phrase="I am so hungry, I want a juicy pizza!">🍕 "Want pizza"</button>
+            <button class="speech-chip" data-phrase="I need new gaming headphones and a microphone">🎧 "HyperX Headset"</button>
+            <button class="speech-chip" data-phrase="I am super thirsty, I need an energy drink">⚡ "Volt Energy"</button>
+            <button class="speech-chip" data-phrase="I want to buy great running sneakers">👟 "Sneakers"</button>
+            <button class="speech-chip danger" data-phrase="I am going to place a bet in an online casino">🚫 "Casino (Block)"</button>
+          </div>
+
+          <!-- Delay Setting for Demo -->
+          <div style="margin-top: 10px; display: flex; align-items: center; justify-content: space-between; font-size: 11px; color: var(--text-muted);">
+            <span>In-World Display Delay:</span>
+            <select id="select-pacing-delay" style="background: #1e293b; color: #fff; border: 1px solid #475569; border-radius: 4px; padding: 2px 6px;">
+              <option value="1">1 sec (Demo)</option>
+              <option value="5" selected>5 sec (Presentation)</option>
+              <option value="60">60 sec (Live Gameplay)</option>
+            </select>
+          </div>
+
+          <!-- Live On-Device Intent Radar -->
+          <div class="intent-hud-box" id="intent-hud">
+            <div class="intent-row">
+              <span class="label">Recognized Speech:</span>
+              <span class="val" id="hud-transcript" style="color: #fff;">—</span>
+            </div>
+            <div class="intent-row">
+              <span class="label">On-Device Intent:</span>
+              <span class="val" id="hud-category">food.pizza</span>
+            </div>
+            <div class="intent-row">
+              <span class="label">Confidence:</span>
+              <span class="val" id="hud-conf">0.95</span>
+            </div>
+            <div class="intent-row">
+              <span class="label">Privacy TTL:</span>
+              <span class="val ttl-timer" id="hud-ttl">10:00 min</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Click to Play / Pointer Lock Overlay -->
+      <div id="pointer-lock-overlay">
+        <div class="overlay-content">
+          <div style="font-size: 40px; margin-bottom: 12px;">🎮 ⛏️</div>
+          <h2 class="overlay-title">Minecraft Open World Sandbox</h2>
+          <p class="overlay-desc">
+            Virtual open world with dynamic painting ad slots. Speak into your microphone or click phrase buttons — the system extracts coarse intent on-device, runs an auction, and updates paintings in the tavern or town square within seconds!
+          </p>
+
+          <div class="controls-grid">
+            <div class="control-item">
+              <span class="key-badge">W A S D</span>
+              <span>Movement</span>
+            </div>
+            <div class="control-item">
+              <span class="key-badge">Space</span>
+              <span>Jump</span>
+            </div>
+            <div class="control-item">
+              <span class="key-badge">Mouse</span>
+              <span>Camera Look</span>
+            </div>
+            <div class="control-item">
+              <span class="key-badge">E / Click</span>
+              <span>Interact with Ad</span>
+            </div>
+          </div>
+
+          <button class="start-btn" id="btn-start-game">ENTER GAME WORLD</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- View 2: Partner Dashboard -->
+    <section id="view-partner" class="view-section">
+      <div id="partner-dashboard-root"></div>
+    </section>
+
+    <!-- View 3: Studio Console -->
+    <section id="view-studio" class="view-section">
+      <div id="studio-console-root"></div>
+    </section>
+
+    <!-- View 4: Architecture Inspector -->
+    <section id="view-inspector" class="view-section">
+      <div id="inspector-root"></div>
+    </section>
+  </main>
+
+  <!-- Minecraft In-Game Ad Coupon Modal -->
+  <div id="ad-modal">
+    <div class="minecraft-modal-card">
+      <button class="modal-close-btn" id="modal-close-btn">✕</button>
+
+      <div class="modal-brand-header">
+        <div class="modal-brand-icon" id="modal-icon">🍕</div>
+        <div>
+          <div class="modal-sponsored-badge" id="modal-sponsored-notice">● SPONSORED • VOICECUE VERIFIED</div>
+          <h2 class="modal-headline" id="modal-headline">Hot Pizza in 30 Mins!</h2>
+          <div style="font-size: 13px; color: #cbd5e1;" id="modal-brand-name">Dodo Pizza</div>
+        </div>
+      </div>
+
+      <!-- Player Reward Banner -->
+      <div class="player-reward-box">
+        <div class="reward-icon">💎</div>
+        <div class="reward-text">
+          <strong>You received +50 Emeralds!</strong><br />
+          Game studio bonus for viewing recommended partner content.
+        </div>
+      </div>
+
+      <!-- Coupon Code Box -->
+      <div class="coupon-box">
+        <div>
+          <div style="font-size: 11px; text-transform: uppercase; color: #94a3b8;">Discount Promo Code:</div>
+          <div class="coupon-code" id="modal-coupon-code">CRAFTPIZZA</div>
+        </div>
+        <button class="copy-btn" id="btn-copy-coupon">Copy</button>
+      </div>
+
+      <!-- Privacy Explanation -->
+      <div class="transparency-section">
+        <div style="font-weight: 700; color: #38bdf8; margin-bottom: 4px;">❓ Why am I seeing this ad?</div>
+        <div id="modal-why-text">
+          You enabled "Smart Suggestions" and recently mentioned pizza or food. Raw audio is never stored or transmitted to servers. The intent tag expires automatically in 10 minutes.
+        </div>
+      </div>
+
+      <!-- Modal Footer -->
+      <div class="modal-footer">
+        <button class="forget-btn" id="btn-forget-me">🗑 Delete all my data (Right to be forgotten)</button>
+        <button class="btn-primary" id="btn-claim-done" style="padding: 8px 18px;">Close and Continue Playing</button>
+      </div>
+    </div>
+  </div>
+
+  <script type="module" src="/src/main.js"></script>
+</body>
+</html>

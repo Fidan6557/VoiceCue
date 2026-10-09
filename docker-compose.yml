@@ -1,0 +1,85 @@
+version: '3.8'
+
+services:
+  # 1. Frontend: 3D Minecraft Open World & B2B Dashboards
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: voicecue-frontend
+    ports:
+      - "3000:80"
+    environment:
+      - VITE_API_URL=http://localhost:4000/api
+      - VITE_ML_URL=http://localhost:8000
+    depends_on:
+      - backend
+      - ml-service
+    networks:
+      - voicecue-net
+
+  # 2. Core Backend: Privacy Gateway, Second-Price Auction & Slot Registry
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: voicecue-backend
+    ports:
+      - "4000:4000"
+    environment:
+      - PORT=4000
+      - REDIS_URL=redis://redis:6379
+      - DATABASE_URL=postgresql://voicecue:voicecue_secret@postgres:5432/voicecue_db
+      - ML_SERVICE_URL=http://ml-service:8000
+    depends_on:
+      - redis
+      - postgres
+    networks:
+      - voicecue-net
+
+  # 3. ML Service: Edge Speech-to-Intent Extractor & L2 AI Moderation
+  ml-service:
+    build:
+      context: ./ml-service
+      dockerfile: Dockerfile
+    container_name: voicecue-ml-service
+    ports:
+      - "8000:8000"
+    environment:
+      - PYTHONUNBUFFERED=1
+    networks:
+      - voicecue-net
+
+  # 4. Redis: In-Memory TTL Session & Signal Storage (10 min TTL enforcement)
+  redis:
+    image: redis:7-alpine
+    container_name: voicecue-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    networks:
+      - voicecue-net
+
+  # 5. PostgreSQL: Relational storage for Studios, Slots, Campaigns & Moderation
+  postgres:
+    image: postgres:16-alpine
+    container_name: voicecue-postgres
+    ports:
+      - "5432:5432"
+    environment:
+      - POSTGRES_USER=voicecue
+      - POSTGRES_PASSWORD=voicecue_secret
+      - POSTGRES_DB=voicecue_db
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - voicecue-net
+
+networks:
+  voicecue-net:
+    driver: bridge
+
+volumes:
+  redis_data:
+  postgres_data:

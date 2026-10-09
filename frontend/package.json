@@ -1,0 +1,17 @@
+{
+  "name": "voicecue-frontend",
+  "version": "1.0.0",
+  "description": "VoiceCue 3D Minecraft Open World & B2B Enterprise Platform",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "three": "^0.164.1"
+  },
+  "devDependencies": {
+    "vite": "^5.2.11"
+  }
+}
