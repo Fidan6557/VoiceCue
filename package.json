@@ -4,7 +4,7 @@
   "description": "VoiceCue - In-Game Contextual Ad Recommendation Platform",
   "main": "backend/src/server.js",
   "scripts": {
-    "build": "npm install --prefix backend && npm install --prefix frontend && npm run build --prefix frontend",
+    "build": "npm --prefix frontend install && npm --prefix frontend run build",
     "start": "node backend/src/server.js",
     "dev:backend": "npm run dev --prefix backend",
     "dev:frontend": "npm run dev --prefix frontend"
@@ -17,5 +17,10 @@
     "on-device-nlp"
   ],
   "author": "VoiceCue",
-  "license": "MIT"
+  "license": "MIT",
+  "dependencies": {
+    "cors": "^2.8.6",
+    "express": "^5.3.0",
+    "uuid": "^14.0.2"
+  }
 }
